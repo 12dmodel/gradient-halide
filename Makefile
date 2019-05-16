@@ -53,7 +53,6 @@ LLVM_SYSTEM_LIBS=$(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/g'))
-# LLVM_CXX_FLAGS += -Qunused-arguments
 OPTIMIZE ?= -O3
 OPTIMIZE_FOR_BUILD_TIME ?= -O0
 
@@ -755,8 +754,7 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
                             $(INCLUDE_DIR)/HalideBuffer.h \
-                            $(INCLUDE_DIR)/HalidePytorchHelpers.h \
-                            $(INCLUDE_DIR)/HalidePytorchCudaHelpers.h
+                            $(INCLUDE_DIR)/HalidePytorchHelpers.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) \
@@ -833,11 +831,6 @@ $(INCLUDE_DIR)/HalideBuffer.h: $(SRC_DIR)/runtime/HalideBuffer.h
 	cp $< $(INCLUDE_DIR)/
 
 $(INCLUDE_DIR)/HalidePytorchHelpers.h: $(SRC_DIR)/runtime/HalidePytorchHelpers.h
-	echo Copying $<
-	@mkdir -p $(@D)
-	cp $< $(INCLUDE_DIR)/
-
-$(INCLUDE_DIR)/HalidePytorchCudaHelpers.h: $(SRC_DIR)/runtime/HalidePytorchCudaHelpers.h
 	echo Copying $<
 	@mkdir -p $(@D)
 	cp $< $(INCLUDE_DIR)/
@@ -1700,10 +1693,6 @@ ifneq (,$(findstring clang version 7.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
-ifneq (,$(findstring clang version 7.1,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
 ifneq (,$(findstring clang version 8.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -1728,7 +1717,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 40 50 60 70 71 80))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 40 50 60 70 80))
 LLVM_OK=yes
 endif
 

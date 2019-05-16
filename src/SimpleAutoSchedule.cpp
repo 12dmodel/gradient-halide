@@ -135,11 +135,10 @@ void simple_autoschedule(std::vector<Func> &outputs,
         }
         debug(1) << "[simple_autoschedule] largest_dim:" << largest_dim << "\n";
 
-        if (output_set.find(func.name()) == output_set.end()) {
-            // TODO(mgharbi): this should distinguish between internal Funcs and Generator Output params, which
-            // break the memoization
-            // func.memoize();
-        }
+        //if (output_set.find(func.name()) == output_set.end()) {
+            //// Always memoize the function if it's not output
+            //func.memoize();
+        //}
 
         func.compute_root();
         // Initial definition is easy: everything is pure variables.
@@ -199,12 +198,11 @@ void simple_autoschedule(std::vector<Func> &outputs,
                     // No fused_vars
                     func.reorder(func.args()[dim_width], func.args()[dim_height])
                         .gpu_tile(func.args()[dim_width], func.args()[dim_height],
-                            xo, yo, xi, yi, tile_width, tile_height, TailStrategy::GuardWithIf);
+                            xo, yo, xi, yi, tile_width, tile_height);
                 } else {
                     func.reorder(func.args()[dim_width], func.args()[dim_height], fused_var)
                         .gpu_tile(func.args()[dim_width], func.args()[dim_height], fused_var,
-                            xo, yo, zo, xi, yi, zi, tile_width, tile_height, tile_channel,
-                            TailStrategy::GuardWithIf);
+                            xo, yo, zo, xi, yi, zi, tile_width, tile_height, tile_channel);
                 }
             } else {
                 // CPU
@@ -257,11 +255,11 @@ void simple_autoschedule(std::vector<Func> &outputs,
                 if (!has_extra_dimensions) {
                     // No fused_vars
                     func.gpu_tile(func.args()[largest_dim],
-                        xo, xi, tile_width * tile_height, TailStrategy::GuardWithIf);
+                        xo, xi, tile_width * tile_height);
                 } else {
                     func.reorder(func.args()[largest_dim], fused_var)
                         .gpu_tile(func.args()[largest_dim], fused_var,
-                            xo, yo, xi, yi, tile_width * tile_height, tile_channel, TailStrategy::GuardWithIf);
+                            xo, yo, xi, yi, tile_width * tile_height, tile_channel);
                 }
             } else {
                 // CPU
@@ -287,7 +285,7 @@ void simple_autoschedule(std::vector<Func> &outputs,
                 }
                 // Launch GPU threads
                 Var block, thread;
-                func.gpu_tile(fused_var, block, thread, std::min(var_size, 32), TailStrategy::GuardWithIf);
+                func.gpu_tile(fused_var, block, thread, std::min(var_size, 32));
             }
         } else {
             debug(1) << "[simple_autoschedule] Not enough parallelism, serialize on CPU.\n";
@@ -587,14 +585,13 @@ void simple_autoschedule(std::vector<Func> &outputs,
                         func.update(update_id)
                             .reorder(pure_args[pdim_width], pure_args[pdim_height])
                             .gpu_tile(pure_args[pdim_width], pure_args[pdim_height],
-                                      xo, yo, xi, yi, tile_width, tile_height, TailStrategy::GuardWithIf);
+                                      xo, yo, xi, yi, tile_width, tile_height);
 
                     } else {
                         func.update(update_id)
                             .reorder(pure_args[pdim_width], pure_args[pdim_height], fused_var)
                             .gpu_tile(pure_args[pdim_width], pure_args[pdim_height], fused_var,
-                                      xo, yo, zo, xi, yi, zi, tile_width, tile_height, tile_channel,
-                                      TailStrategy::GuardWithIf);
+                                      xo, yo, zo, xi, yi, zi, tile_width, tile_height, tile_channel);
                     }
                 } else {
                     // CPU
@@ -633,15 +630,13 @@ void simple_autoschedule(std::vector<Func> &outputs,
                         // no fused_var
                         func.update(update_id)
                             .gpu_tile(pure_args[largest_pdim],
-                                      xo, xi, tile_width * tile_height,
-                                      TailStrategy::GuardWithIf);
+                                      xo, xi, tile_width * tile_height);
 
                     } else {
                         func.update(update_id)
                             .reorder(pure_args[largest_pdim], fused_var)
                             .gpu_tile(pure_args[largest_pdim], fused_var,
-                                      xo, yo, xi, yi, tile_width * tile_height, tile_channel,
-                                      TailStrategy::GuardWithIf);
+                                      xo, yo, xi, yi, tile_width * tile_height, tile_channel);
                     }
                 } else {
                     // CPU
@@ -715,8 +710,7 @@ void simple_autoschedule(std::vector<Func> &outputs,
                         // TODO: don't fuse when var_size is > 128
                         Var block, thread;
                         func.update(update_id)
-                            .gpu_tile(fused_vars.back(), block, thread, std::min(var_size, 128),
-                                    TailStrategy::GuardWithIf);
+                            .gpu_tile(fused_vars.back(), block, thread, std::min(var_size, 128));
                     }
                 }
             } else {
@@ -841,11 +835,7 @@ namespace Internal {
 
 void simple_autoschedule_test() {
     // For now we just test whether it compiles or not.
-    SimpleAutoscheduleOptions options;
-    // options.gpu = true;
-    Target target = get_host_target();
-    // target.set_feature(Target::CUDA);
-
+    SimpleAutoscheduleOptions cpu_options;
     Var x("x"), y("y"), z("z");
     { // Simple pointwise operations. Should inline.
         Func in("in");
@@ -860,12 +850,11 @@ void simple_autoschedule_test() {
         simple_autoschedule(f2,
                             {}, // parameters map
                             {{0, 127},
-                             {0, 127}}, // output bounds
-                            options);
+                             {0, 127}}, // output bounds (min, max)
+                            cpu_options);
 
-        Buffer<float> output = f2.realize(128, 128, target);
+        Buffer<float> output = f2.realize(128, 128);
     }
-    
     { // 1D convolution. Should just parallize.
         Buffer<float> buf(16384);
         Buffer<float> k(5);
@@ -876,10 +865,10 @@ void simple_autoschedule_test() {
 
         simple_autoschedule(conv,
                             {}, // parameters map
-                            {{0, 16384 - 6}}, // output bounds
-                            options);
+                            {{0, 16384 - 6}}, // output bounds (min, max)
+                            cpu_options);
 
-        Buffer<float> output = conv.realize(16384 - 5, target);
+        Buffer<float> output = conv.realize(16384 - 5);
     }
     { // 1D convolution in 2D. Should just parallelize the first dimension.
         Buffer<float> buf(16384, 3);
@@ -892,10 +881,10 @@ void simple_autoschedule_test() {
         simple_autoschedule(conv,
                             {}, // parameters map
                             {{0, 16384 - 6},
-                             {0, 3 - 1}}, // output bounds
-                            options);
+                             {0, 3 - 1}}, // output bounds (min, max)
+                            cpu_options);
 
-        Buffer<float> output = conv.realize(16384 - 5, 3, target);
+        Buffer<float> output = conv.realize(16384 - 5, 3);
     }
     { // 2D convolution. Should just parallize.
         Buffer<float> buf(128, 128);
@@ -908,10 +897,10 @@ void simple_autoschedule_test() {
         simple_autoschedule(conv,
                             {}, // parameters map
                             {{0, 128 - 6},
-                             {0, 128 - 6}}, // output bounds
-                            options);
+                             {0, 128 - 6}}, // output bounds (min, max)
+                            cpu_options);
 
-        Buffer<float> output = conv.realize(128 - 5, 128 - 5, target);
+        Buffer<float> output = conv.realize(128 - 5, 128 - 5);
     }
     { // 2D convolution on 3D image. Should just parallelize.
         Buffer<float> buf(128, 128, 16);
@@ -928,9 +917,9 @@ void simple_autoschedule_test() {
                              {0, 128 - 6},
                              {0, 16 - 1},
                              }, // output bounds
-                            options);
+                            cpu_options);
 
-        Buffer<float> output = conv.realize(128 - 5, 128 - 5, 16, target);
+        Buffer<float> output = conv.realize(128 - 5, 128 - 5, 16);
     }
     { // 1D reduction onto a scalar. Should perform parallel reduction
         Buffer<float> buf(16384);
@@ -940,10 +929,10 @@ void simple_autoschedule_test() {
 
         simple_autoschedule(sum,
                             {}, // parameters map
-                            {}, // output bounds
-                            options);
+                            {}, // output bounds (min, max)
+                            cpu_options);
 
-        Buffer<float> output = sum.realize(target);
+        Buffer<float> output = sum.realize();
     }
     { // 2D reduction onto a scalar. Should perform parallel reduction
         Buffer<float> buf(128, 128);
@@ -953,10 +942,10 @@ void simple_autoschedule_test() {
 
         simple_autoschedule(sum,
                             {}, // parameters map
-                            {}, // output bounds
-                            options);
+                            {}, // output bounds (min, max)
+                            cpu_options);
 
-        Buffer<float> output = sum.realize(target);
+        Buffer<float> output = sum.realize();
     }
 
     debug(0) << "Simple autoschedule test passed\n";
